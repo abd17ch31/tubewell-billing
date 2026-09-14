@@ -28,16 +28,19 @@
 
     document.getElementById("logoutBtn").addEventListener("click", async () => {
       try { await fetch("/api/auth/logout", { method: "POST" }); } catch (_) {}
-      settingsCache && settingsCache.clear && settingsCache.clear();
+      if (window.settingsCache && settingsCache.clear) settingsCache.clear();
       window.location.href = "/login.html";
     });
 
-    // Load business name into the topbar
-    if (window.settingsCache) {
-      settingsCache.load().then(s => {
-        const el = document.getElementById("brandName");
-        if (el && s && s.business_name) el.textContent = s.business_name;
-      });
-    }
+    // Fetch business name directly — no dependency on settings.js being loaded
+    fetch("/api/settings", { credentials: "same-origin" })
+      .then(r => r.ok ? r.json() : null)
+      .then(s => {
+        if (s && s.business_name) {
+          const el = document.getElementById("brandName");
+          if (el) el.textContent = s.business_name;
+        }
+      })
+      .catch(() => {});
   };
 })();
