@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Customers · Tubewell Billing</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="row-between" style="margin-bottom:12px">
+      <h1>Customers</h1>
+      <a href="/add-customer.html"><button>+ Add Customer</button></a>
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <input id="search" type="search" placeholder="Search by name or mobile…" />
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Mobile</th>
+            <th class="text-right">Due</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="3" class="muted">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/format.js"></script>
+  <script src="/js/nav.js"></script>
+  <script>
+    renderNav("customers");
+
+    const rowsEl = document.getElementById("rows");
+    const searchEl = document.getElementById("search");
+    let allCustomers = [];
+
+    async function load() {
+      try {
+        allCustomers = await api.get("/api/customers");
+        render();
+      } catch (e) {
+        rowsEl.innerHTML = `<tr><td colspan="3" class="error">${e.message}</td></tr>`;
+      }
+    }
+
+    function render() {
+      const q = searchEl.value.trim().toLowerCase();
+      const list = allCustomers.filter(c =>
+        !q ||
+        c.name.toLowerCase().includes(q) ||
+        (c.mobile || "").includes(q)
+      );
+
+      if (!list.length) {
+        rowsEl.innerHTML = `<tr><td colspan="3" class="muted">No customers found.</td></tr>`;
+        return;
+      }
+
+      rowsEl.innerHTML = list.map(c => {
+        const cls = c.due_paise > 0 ? "positive" : "zero";
+        return `
+          <tr data-id="${c.id}">
+            <td>${escapeHtml(c.name)}</td>
+            <td>${escapeHtml(c.mobile)}</td>
+            <td class="text-right due ${cls}">${formatINR(c.due_paise)}</td>
+          </tr>`;
+      }).join("");
+
+      rowsEl.querySelectorAll("tr[data-id]").forEach(tr => {
+        tr.addEventListener("click", () => {
+          window.location.href = `/customer.html?id=${tr.dataset.id}`;
+        });
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, ch => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+      }[ch]));
+    }
+
+    searchEl.addEventListener("input", render);
+    load();
+  </script>
+</body>
+</html>

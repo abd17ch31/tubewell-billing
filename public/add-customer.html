@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Add Customer · Tubewell Billing</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Add Customer</h1>
+
+    <form id="form" class="card stack" autocomplete="off">
+      <div>
+        <label for="name">Name *</label>
+        <input id="name" name="name" required />
+      </div>
+      <div>
+        <label for="mobile">Mobile * (10 digits)</label>
+        <input id="mobile" name="mobile" inputmode="numeric" pattern="\d{10,13}" required />
+      </div>
+      <div>
+        <label for="address">Address / Village</label>
+        <input id="address" name="address" />
+      </div>
+
+      <p id="err" class="error" hidden></p>
+
+      <div class="row" style="justify-content:flex-end">
+        <a href="/customers.html"><button type="button" class="secondary">Cancel</button></a>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+
+ <script src="/js/api.js?v=1"></script>
+<script src="/js/format.js?v=1"></script>
+<script src="/js/nav.js?v=1"></script>
+  <script>
+    renderNav("add-customer");
+
+    const form = document.getElementById("form");
+    const errEl = document.getElementById("err");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errEl.hidden = true;
+      const payload = {
+        name: form.name.value.trim(),
+        mobile: form.mobile.value.trim(),
+        address: form.address.value.trim(),
+      };
+      try {
+        const created = await api.post("/api/customers", payload);
+        window.location.href = `/customer.html?id=${created.id}`;
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.hidden = false;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Settings · Tubewell Billing</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Settings</h1>
+
+    <form id="settingsForm" class="card stack" style="margin-bottom:12px">
+      <h2>Business Info</h2>
+
+      <div>
+        <label for="business_name">Business name *</label>
+        <input id="business_name" required />
+      </div>
+
+      <div>
+        <label for="business_address">Address / Village</label>
+        <input id="business_address" />
+      </div>
+
+      <div>
+        <label for="receipt_footer">Message footer</label>
+        <input id="receipt_footer" placeholder="Thank you." />
+        <p class="muted" style="font-size:.8rem; margin-top:4px">Appears at the end of WhatsApp bill and receipt messages.</p>
+      </div>
+
+      <div>
+        <label for="default_rate">Default rate (₹ per hour)</label>
+        <input id="default_rate" type="number" step="0.01" min="0" />
+        <p class="muted" style="font-size:.8rem; margin-top:4px">Pre-filled in the Add Bill dialog.</p>
+      </div>
+
+      <p id="sErr" class="error" hidden></p>
+
+      <div class="row" style="justify-content:flex-end">
+        <button type="submit">Save Settings</button>
+      </div>
+      <p id="sOk" class="muted" hidden>Saved.</p>
+    </form>
+
+    <form id="pwForm" class="card stack">
+      <h2>Change Admin Password</h2>
+
+      <div>
+        <label for="current_password">Current password *</label>
+        <input id="current_password" type="password" required />
+      </div>
+
+      <div>
+        <label for="new_password">New password * (min 6 characters)</label>
+        <input id="new_password" type="password" required />
+      </div>
+
+      <div>
+        <label for="confirm_password">Confirm new password *</label>
+        <input id="confirm_password" type="password" required />
+      </div>
+
+      <p id="pwErr" class="error" hidden></p>
+
+      <div class="row" style="justify-content:flex-end">
+        <button type="submit">Change Password</button>
+      </div>
+      <p id="pwOk" class="muted" hidden>Password changed.</p>
+    </form>
+  </div>
+
+  <script src="/js/api.js?v=12"></script>
+  <script src="/js/format.js?v=12"></script>
+  <script src="/js/settings.js?v=12"></script>
+  <script src="/js/whatsapp.js?v=12"></script>
+  <script src="/js/nav.js?v=12"></script>
+  <script>
+    renderNav("settings");
+
+    const settingsForm = document.getElementById("settingsForm");
+    const sErr = document.getElementById("sErr");
+    const sOk  = document.getElementById("sOk");
+
+    const pwForm = document.getElementById("pwForm");
+    const pwErr  = document.getElementById("pwErr");
+    const pwOk   = document.getElementById("pwOk");
+
+    // Load existing settings
+    (async () => {
+      try {
+        const s = await api.get("/api/settings");
+        settingsForm.business_name.value = s.business_name || "";
+        settingsForm.business_address.value = s.business_address || "";
+        settingsForm.receipt_footer.value = s.receipt_footer || "";
+        settingsForm.default_rate.value = ((Number(s.default_rate_paise) || 0) / 100).toString();
+      } catch (e) {
+        sErr.textContent = e.message;
+        sErr.hidden = false;
+      }
+    })();
+
+    settingsForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      sErr.hidden = true;
+      sOk.hidden = true;
+
+      const rateRupees = Number(settingsForm.default_rate.value);
+      if (!Number.isFinite(rateRupees) || rateRupees < 0) {
+        sErr.textContent = "Default rate must be zero or more.";
+        sErr.hidden = false;
+        return;
+      }
+
+      const payload = {
+        business_name: settingsForm.business_name.value.trim(),
+        business_address: settingsForm.business_address.value.trim(),
+        receipt_footer: settingsForm.receipt_footer.value.trim() || "Thank you.",
+        default_rate_paise: Math.round(rateRupees * 100),
+      };
+
+      try {
+        await api.put("/api/settings", payload);
+        settingsCache.clear();
+        const fresh = await settingsCache.load();
+        const el = document.getElementById("brandName");
+        if (el) el.textContent = fresh.business_name || "Tubewell Billing";
+        sOk.hidden = false;
+      } catch (err) {
+        sErr.textContent = err.message;
+        sErr.hidden = false;
+      }
+    });
+
+    pwForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      pwErr.hidden = true;
+      pwOk.hidden = true;
+
+      if (pwForm.new_password.value !== pwForm.confirm_password.value) {
+        pwErr.textContent = "New passwords do not match.";
+        pwErr.hidden = false;
+        return;
+      }
+
+      try {
+        await api.post("/api/auth/change-password", {
+          current_password: pwForm.current_password.value,
+          new_password: pwForm.new_password.value,
+        });
+        pwForm.reset();
+        pwOk.hidden = false;
+      } catch (err) {
+        pwErr.textContent = err.message;
+        pwErr.hidden = false;
+      }
+    });
+  </script>
+</body>
+</html>

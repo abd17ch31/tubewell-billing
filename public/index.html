@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard · Tubewell Billing</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="row-between" style="margin-bottom:12px">
+      <h1>Dashboard</h1>
+      <a href="/add-customer.html"><button>+ Add Customer</button></a>
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <label for="q" style="margin-top:0">Quick search customer</label>
+      <div class="quick-search">
+        <input id="q" type="search" placeholder="Name or mobile…" autocomplete="off" />
+        <div id="qResults" class="quick-results" hidden></div>
+      </div>
+    </div>
+
+    <div class="stats" style="margin-bottom:12px">
+      <div class="stat">
+        <div class="label">Total Customers</div>
+        <div class="value" id="sCustomers">—</div>
+      </div>
+      <div class="stat danger">
+        <div class="label">Total Outstanding</div>
+        <div class="value" id="sOutstanding">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">Today's Bills</div>
+        <div class="value" id="sTodayBills">—</div>
+        <div class="sub" id="sTodayBillsAmt"></div>
+      </div>
+      <div class="stat success">
+        <div class="label">Today's Collected</div>
+        <div class="value" id="sTodayPayments">—</div>
+        <div class="sub" id="sTodayPaymentsAmt"></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>Recent Transactions</h2>
+        <div id="recent"></div>
+      </div>
+
+      <div class="card">
+        <h2>Top Defaulters</h2>
+        <div id="defaulters"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js?v=11"></script>
+  <script src="/js/format.js?v=11"></script>
+  <script src="/js/whatsapp.js?v=11"></script>
+  <script src="/js/nav.js?v=11"></script>
+  <script>
+    renderNav("dashboard");
+
+    const q = document.getElementById("q");
+    const qResults = document.getElementById("qResults");
+    const recentEl = document.getElementById("recent");
+    const defaultersEl = document.getElementById("defaulters");
+
+    let allCustomers = [];
+
+    loadDashboard();
+    loadCustomersForSearch();
+
+    async function loadDashboard() {
+      try {
+        const d = await api.get("/api/dashboard");
+
+        document.getElementById("sCustomers").textContent = d.total_customers;
+        document.getElementById("sOutstanding").textContent = formatINR(d.total_outstanding_paise);
+        document.getElementById("sTodayBills").textContent = d.today_bills_count;
+        document.getElementById("sTodayBillsAmt").textContent = formatINR(d.today_bills_paise);
+        document.getElementById("sTodayPayments").textContent = d.today_payments_count;
+        document.getElementById("sTodayPaymentsAmt").textContent = formatINR(d.today_payments_paise);
+
+        renderRecent(d.recent);
+        renderDefaulters(d.top_defaulters);
+      } catch (e) {
+        recentEl.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`;
+      }
+    }
+
+    function renderRecent(rows) {
+      if (!rows.length) {
+        recentEl.innerHTML = `<p class="muted">No transactions yet.</p>`;
+        return;
+      }
+      recentEl.innerHTML = rows.map(r => {
+        const isBill = r.type === "bill";
+        const sign = isBill ? "−" : "+";
+        const cls = isBill ? "bill" : "payment";
+        const label = isBill ? "Bill" : "Payment" + (r.mode ? ` · ${r.mode}` : "");
+        return `
+          <a class="tx-row" href="/customer.html?id=${r.customer_id}" style="color:inherit">
+            <div class="left">
+              <span class="name">${escapeHtml(r.customer_name)}</span>
+              <span class="meta">${label} · ${formatDate(r.date)}</span>
+            </div>
+            <div class="tx-amount ${cls}">${sign} ${formatINR(r.amount_paise)}</div>
+          </a>`;
+      }).join("");
+    }
+
+    function renderDefaulters(rows) {
+      if (!rows.length) {
+        defaultersEl.innerHTML = `<p class="muted">No outstanding dues. 🎉</p>`;
+        return;
+      }
+      defaultersEl.innerHTML = rows.map(r => `
+        <a class="tx-row" href="/customer.html?id=${r.id}" style="color:inherit">
+          <div class="left">
+            <span class="name">${escapeHtml(r.name)}</span>
+            <span class="meta">${escapeHtml(r.mobile)}</span>
+          </div>
+          <div class="tx-amount bill">${formatINR(r.due_paise)}</div>
+        </a>`).join("");
+    }
+
+    async function loadCustomersForSearch() {
+      try {
+        allCustomers = await api.get("/api/customers");
+      } catch (_) {}
+    }
+
+    q.addEventListener("input", () => {
+      const s = q.value.trim().toLowerCase();
+      if (!s) { qResults.hidden = true; return; }
+      const matches = allCustomers.filter(c =>
+        c.name.toLowerCase().includes(s) || (c.mobile || "").includes(s)
+      ).slice(0, 8);
+
+      if (!matches.length) {
+        qResults.innerHTML = `<div class="empty">No matches.</div>`;
+      } else {
+        qResults.innerHTML = matches.map(c =>
+          `<a href="/customer.html?id=${c.id}">
+             <span>${escapeHtml(c.name)}<div class="muted" style="font-size:.8rem">${escapeHtml(c.mobile)}</div></span>
+             <span class="due ${c.due_paise > 0 ? "positive" : "zero"}">${formatINR(c.due_paise)}</span>
+           </a>`
+        ).join("");
+      }
+      qResults.hidden = false;
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!qResults.contains(e.target) && e.target !== q) qResults.hidden = true;
+    });
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function (ch) {
+        return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[ch];
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Billing History · Tubewell Billing</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Billing History</h1>
+    <div class="table-wrap" style="margin-top:12px">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Customer</th>
+            <th>Details</th>
+            <th class="text-right">Amount</th>
+          </tr>
+        </thead>
+        <tbody id="rows"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="/js/api.js?v=11"></script>
+  <script src="/js/format.js?v=11"></script>
+  <script src="/js/whatsapp.js?v=11"></script>
+  <script src="/js/nav.js?v=11"></script>
+  <script>
+    renderNav("billing-history");
+    const rowsEl = document.getElementById("rows");
+
+    (async () => {
+      try {
+        const rows = await api.get("/api/all-transactions");
+        if (!rows.length) {
+          rowsEl.innerHTML = `<tr><td colspan="5" class="muted">No transactions yet.</td></tr>`;
+          return;
+        }
+        rowsEl.innerHTML = rows.map(r => {
+          const isBill = r.type === "bill";
+          const details = isBill
+            ? `${formatUsageShort(r.usage_minutes)} · ${formatTime12(r.start_time)}–${formatTime12(r.end_time)}`
+            : (r.mode === "cash" ? "Cash" : "Online") + (r.note ? " · " + escapeHtml(r.note) : "");
+          const amtClass = isBill ? "due positive" : "due zero";
+          return `
+            <tr data-id="${r.customer_id}">
+              <td>${formatDate(r.date)}</td>
+              <td>${isBill ? '<span class="badge unpaid">Bill</span>' : '<span class="badge paid">Payment</span>'}</td>
+              <td>${escapeHtml(r.customer_name)}</td>
+              <td class="muted">${details}</td>
+              <td class="text-right ${amtClass}">${isBill ? "−" : "+"} ${formatINR(r.amount_paise)}</td>
+            </tr>`;
+        }).join("");
+
+        rowsEl.querySelectorAll("tr[data-id]").forEach(tr => {
+          tr.addEventListener("click", () => {
+            window.location.href = `/customer.html?id=${tr.dataset.id}`;
+          });
+        });
+      } catch (e) {
+        rowsEl.innerHTML = `<tr><td colspan="5" class="error">${escapeHtml(e.message)}</td></tr>`;
+      }
+    })();
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function (ch) {
+        return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[ch];
+      });
+    }
+  </script>
+</body>
+</html>

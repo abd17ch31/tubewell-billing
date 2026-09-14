@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login · Tubewell Billing</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="center-screen">
+    <form id="loginForm" class="card login-card" autocomplete="off">
+      <h1>Tubewell Billing</h1>
+      <p class="muted">Enter the admin password to continue.</p>
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required autofocus />
+
+      <div style="margin-top:16px">
+        <button type="submit" style="width:100%">Login</button>
+      </div>
+      <p id="err" class="error" hidden></p>
+    </form>
+  </div>
+
+  <script>
+    const form = document.getElementById("loginForm");
+    const errEl = document.getElementById("err");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errEl.hidden = true;
+
+      const password = form.password.value;
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          errEl.textContent = data.error || "Login failed";
+          errEl.hidden = false;
+          return;
+        }
+        window.location.href = "/";
+      } catch (err) {
+        errEl.textContent = "Network error";
+        errEl.hidden = false;
+      }
+    });
+  </script>
+</body>
+</html>

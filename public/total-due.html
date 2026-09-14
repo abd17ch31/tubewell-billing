@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Total Due · Tubewell Billing</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Total Due</h1>
+
+    <div class="stats" style="margin-top:12px">
+      <div class="stat">
+        <div class="label">Customers Owing</div>
+        <div class="value" id="sOwing">—</div>
+      </div>
+      <div class="stat danger">
+        <div class="label">Total Outstanding</div>
+        <div class="value" id="sTotal">—</div>
+      </div>
+    </div>
+
+    <div class="table-wrap" style="margin-top:12px">
+      <table>
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Mobile</th>
+            <th class="text-right">Due</th>
+          </tr>
+        </thead>
+        <tbody id="rows"><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="/js/api.js?v=11"></script>
+  <script src="/js/format.js?v=11"></script>
+  <script src="/js/whatsapp.js?v=11"></script>
+  <script src="/js/nav.js?v=11"></script>
+  <script>
+    renderNav("total-due");
+    const rowsEl = document.getElementById("rows");
+
+    (async () => {
+      try {
+        const rows = await api.get("/api/all-due");
+        const positive = rows.filter(r => r.due_paise > 0);
+        const total = positive.reduce((s, r) => s + r.due_paise, 0);
+
+        document.getElementById("sOwing").textContent = positive.length;
+        document.getElementById("sTotal").textContent = formatINR(total);
+
+        if (!rows.length) {
+          rowsEl.innerHTML = `<tr><td colspan="3" class="muted">No customers yet.</td></tr>`;
+          return;
+        }
+        rowsEl.innerHTML = rows.map(r => `
+          <tr data-id="${r.id}">
+            <td>${escapeHtml(r.name)}</td>
+            <td>${escapeHtml(r.mobile)}</td>
+            <td class="text-right due ${r.due_paise > 0 ? "positive" : "zero"}">${formatINR(r.due_paise)}</td>
+          </tr>`).join("");
+
+        rowsEl.querySelectorAll("tr[data-id]").forEach(tr => {
+          tr.addEventListener("click", () => {
+            window.location.href = `/customer.html?id=${tr.dataset.id}`;
+          });
+        });
+      } catch (e) {
+        rowsEl.innerHTML = `<tr><td colspan="3" class="error">${escapeHtml(e.message)}</td></tr>`;
+      }
+    })();
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function (ch) {
+        return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[ch];
+      });
+    }
+  </script>
+</body>
+</html>
