@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Customer · Tubewell Billing</title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=2" />
 </head>
 <body>
   <div class="container">
@@ -101,11 +101,34 @@
     </form>
   </dialog>
 
-  <script src="/js/api.js?v=10"></script>
-  <script src="/js/format.js?v=10"></script>
-  <script src="/js/whatsapp.js?v=10"></script>
-    <script src="/js/settings.js?v=12"></script>
-  <script src="/js/nav.js?v=10"></script>
+  <!-- Notebook due dialog -->
+  <dialog id="nbDialog">
+    <form id="nbForm" class="dialog-body">
+      <h2>Add Notebook Due</h2>
+
+      <label for="nDate">Date *</label>
+      <input id="nDate" type="date" required />
+
+      <label for="nAmount">Amount (₹) *</label>
+      <input id="nAmount" type="number" step="0.01" min="0.01" required inputmode="decimal" />
+
+      <label for="nNote">Note (optional)</label>
+      <input id="nNote" placeholder="e.g. carried forward from notebook" />
+
+      <p id="nbErr" class="error" hidden></p>
+
+      <div class="dialog-actions">
+        <button type="button" class="secondary" id="cancelNb">Cancel</button>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/js/api.js?v=13"></script>
+  <script src="/js/format.js?v=13"></script>
+  <script src="/js/settings.js?v=13"></script>
+  <script src="/js/whatsapp.js?v=13"></script>
+  <script src="/js/nav.js?v=13"></script>
   <script>
     renderNav("customers");
 
@@ -137,9 +160,17 @@
     const pNote         = document.getElementById("pNote");
     const payCurrentDue = document.getElementById("payCurrentDue");
 
+    const nbDialog = document.getElementById("nbDialog");
+    const nbForm   = document.getElementById("nbForm");
+    const nbErr    = document.getElementById("nbErr");
+    const nDate    = document.getElementById("nDate");
+    const nAmount  = document.getElementById("nAmount");
+    const nNote    = document.getElementById("nNote");
+
     let currentCustomer = null;
     let currentBills = [];
     let currentPayments = [];
+    let currentNotebook = [];
 
     if (!id) {
       mainEl.innerHTML = `<p class="error">Missing customer id.</p>`;
@@ -149,14 +180,16 @@
 
     async function loadAll() {
       try {
-        const [customer, bills, payments] = await Promise.all([
+        const [customer, bills, payments, notebook] = await Promise.all([
           api.get(`/api/customers/${id}`),
           api.get(`/api/customers/${id}/bills`),
           api.get(`/api/customers/${id}/payments`),
+          api.get(`/api/customers/${id}/notebook-dues`),
         ]);
         currentCustomer = customer;
         currentBills = bills;
         currentPayments = payments;
+        currentNotebook = notebook;
         render();
       } catch (e) {
         mainEl.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`;
@@ -182,9 +215,29 @@
           </div>
           <div class="row" style="margin-top:16px">
             <button id="addBillBtn">Add Bill</button>
+            <button id="addNbBtn" class="secondary">Add Notebook Due</button>
             <button id="payBillBtn" class="secondary">Pay Bill</button>
             <button id="editBtn" class="secondary">Edit</button>
             <button id="deleteBtn" class="danger">Delete</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Notebook Dues</h2>
+          <div class="table-wrap" style="margin-top:8px">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Note</th>
+                  <th class="text-right">Amount</th>
+                  <th class="text-right">Allocated</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>${renderNotebookRows()}</tbody>
+            </table>
           </div>
         </div>
 
@@ -204,7 +257,7 @@
                   <th></th>
                 </tr>
               </thead>
-              <tbody id="billsRows">${renderBillRows()}</tbody>
+              <tbody>${renderBillRows()}</tbody>
             </table>
           </div>
         </div>
@@ -222,7 +275,7 @@
                   <th></th>
                 </tr>
               </thead>
-              <tbody id="paymentsRows">${renderPaymentRows()}</tbody>
+              <tbody>${renderPaymentRows()}</tbody>
             </table>
           </div>
         </div>
@@ -245,6 +298,7 @@
       });
 
       document.getElementById("addBillBtn").addEventListener("click", openBillDialog);
+      document.getElementById("addNbBtn").addEventListener("click", openNbDialog);
       document.getElementById("payBillBtn").addEventListener("click", openPayDialog);
 
       // ---- Bill Send ----
@@ -265,6 +319,20 @@
           if (!confirm("Delete this bill?\n\n" + label + "\n\nThis cannot be undone.")) return;
           try {
             await api.del(`/api/bills/${bill.id}`);
+            await loadAll();
+          } catch (e) { alert(e.message); }
+        });
+      });
+
+      // ---- Notebook Delete ----
+      mainEl.querySelectorAll("[data-delete-nb]").forEach(function (btn) {
+        btn.addEventListener("click", async function () {
+          const n = currentNotebook.find(function (x) { return String(x.id) === btn.dataset.deleteNb; });
+          if (!n) return;
+          const label = formatDate(n.due_date) + " · " + formatINR(n.amount_paise);
+          if (!confirm("Delete this notebook due?\n\n" + label + "\n\nThis cannot be undone.")) return;
+          try {
+            await api.del(`/api/notebook-dues/${n.id}`);
             await loadAll();
           } catch (e) { alert(e.message); }
         });
@@ -327,6 +395,32 @@
       return html;
     }
 
+    function renderNotebookRows() {
+      if (!currentNotebook.length) {
+        return `<tr><td colspan="6" class="muted">No notebook dues.</td></tr>`;
+      }
+      let html = "";
+      for (let i = 0; i < currentNotebook.length; i++) {
+        const n = currentNotebook[i];
+        const allocated = n.allocated_paise || 0;
+        let status;
+        if (allocated >= n.amount_paise) status = { cls: "paid", label: "Paid" };
+        else if (allocated > 0)          status = { cls: "partial", label: "Partially Paid" };
+        else                             status = { cls: "unpaid", label: "Unpaid" };
+
+        html += `
+          <tr>
+            <td>${formatDate(n.due_date)}</td>
+            <td class="muted">${escapeHtml(n.note || "—")}</td>
+            <td class="text-right">${formatINR(n.amount_paise)}</td>
+            <td class="text-right">${formatINR(allocated)}</td>
+            <td><span class="badge ${status.cls}">${status.label}</span></td>
+            <td><button class="danger" data-delete-nb="${n.id}" style="padding:6px 10px;font-size:.85rem">Delete</button></td>
+          </tr>`;
+      }
+      return html;
+    }
+
     function renderPaymentRows() {
       if (!currentPayments.length) {
         return `<tr><td colspan="5" class="muted">No payments yet.</td></tr>`;
@@ -359,7 +453,7 @@
     // ---------- Add Bill dialog ----------
     let usageManuallyEdited = false;
 
-        async function openBillDialog() {
+    async function openBillDialog() {
       usageManuallyEdited = false;
       billErr.hidden = true;
       bDate.value = todayISO();
@@ -495,6 +589,45 @@
       } catch (err) {
         payErr.textContent = err.message;
         payErr.hidden = false;
+      }
+    });
+
+    // ---------- Notebook Due dialog ----------
+    function openNbDialog() {
+      nbErr.hidden = true;
+      nDate.value = todayISO();
+      nAmount.value = "";
+      nNote.value = "";
+      nbDialog.showModal();
+    }
+
+    document.getElementById("cancelNb").addEventListener("click", function () { nbDialog.close(); });
+
+    nbForm.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      nbErr.hidden = true;
+
+      const rupees = Number(nAmount.value);
+      if (!Number.isFinite(rupees) || rupees <= 0) {
+        nbErr.textContent = "Amount must be greater than zero.";
+        nbErr.hidden = false;
+        return;
+      }
+      const amount_paise = Math.round(rupees * 100);
+
+      const payload = {
+        due_date: nDate.value,
+        amount_paise: amount_paise,
+        note: nNote.value.trim(),
+      };
+
+      try {
+        await api.post(`/api/customers/${id}/notebook-dues`, payload);
+        nbDialog.close();
+        await loadAll();
+      } catch (err) {
+        nbErr.textContent = err.message;
+        nbErr.hidden = false;
       }
     });
 

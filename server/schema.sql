@@ -55,3 +55,27 @@ CREATE TABLE IF NOT EXISTS settings (
   value      TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+
+-- notebook due
+CREATE TABLE IF NOT EXISTS notebook_dues (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id    INTEGER NOT NULL REFERENCES customers(id),
+  due_date       TEXT    NOT NULL,
+  amount_paise   INTEGER NOT NULL CHECK (amount_paise > 0),
+  note           TEXT,
+  created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS notebook_allocations (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  payment_id        INTEGER NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+  notebook_due_id   INTEGER NOT NULL REFERENCES notebook_dues(id),
+  amount_paise      INTEGER NOT NULL CHECK (amount_paise > 0),
+  created_at        TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_notebook_customer ON notebook_dues(customer_id);
+CREATE INDEX IF NOT EXISTS idx_notebook_date     ON notebook_dues(due_date);
+CREATE INDEX IF NOT EXISTS idx_nballoc_notebook  ON notebook_allocations(notebook_due_id);
+CREATE INDEX IF NOT EXISTS idx_nballoc_payment   ON notebook_allocations(payment_id);

@@ -11,6 +11,7 @@ const billRoutes      = require("./routes/bills");
 const paymentRoutes   = require("./routes/payments");
 const dashboardRoutes = require("./routes/dashboard");
 const settingsRoutes  = require("./routes/settings");
+const notebookRoutes  = require("./routes/notebook");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -48,6 +49,7 @@ app.use("/api", billRoutes);
 app.use("/api", paymentRoutes);
 app.use("/api", dashboardRoutes);
 app.use("/api", settingsRoutes);
+app.use("/api", notebookRoutes);
 
 
 app.get("/api/health", (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
@@ -62,3 +64,5 @@ app.get(/^\/(?!api).*/, (req, res) => {
 app.listen(PORT, () => {
   console.log(`[server] Running on http://localhost:${PORT}`);
 });
+
+

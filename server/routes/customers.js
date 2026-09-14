@@ -8,7 +8,8 @@ router.get("/", (req, res) => {
   const rows = db.prepare(`
     SELECT
       c.id, c.name, c.mobile, c.address, c.created_at,
-      (COALESCE((SELECT SUM(amount_paise) FROM bills    WHERE customer_id = c.id), 0)
+            (COALESCE((SELECT SUM(amount_paise) FROM bills    WHERE customer_id = c.id), 0)
+       + COALESCE((SELECT SUM(amount_paise) FROM notebook_dues WHERE customer_id = c.id), 0)
        - COALESCE((SELECT SUM(amount_paise) FROM payments WHERE customer_id = c.id), 0)
       ) AS due_paise
     FROM customers c
@@ -41,11 +42,12 @@ router.get("/:id", (req, res) => {
   if (!customer) return res.status(404).json({ error: "Customer not found" });
 
   const { due_paise } = db.prepare(`
-    SELECT
+        SELECT
       (COALESCE((SELECT SUM(amount_paise) FROM bills    WHERE customer_id = ?), 0)
+       + COALESCE((SELECT SUM(amount_paise) FROM notebook_dues WHERE customer_id = ?), 0)
        - COALESCE((SELECT SUM(amount_paise) FROM payments WHERE customer_id = ?), 0)
       ) AS due_paise
-  `).get(id, id);
+  `).get(id, id, id);
 
   res.json({ ...customer, due_paise });
 });

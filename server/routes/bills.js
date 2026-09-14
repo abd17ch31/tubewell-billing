@@ -61,12 +61,13 @@ router.post("/customers/:customerId/bills", (req, res) => {
   const amount_paise = Math.round((usageMin / 60) * rate);
 
   // snapshot previous due = current customer due before this bill
-  const { due } = db.prepare(`
+    const { due } = db.prepare(`
     SELECT
       (COALESCE((SELECT SUM(amount_paise) FROM bills    WHERE customer_id = ?), 0)
+       + COALESCE((SELECT SUM(amount_paise) FROM notebook_dues WHERE customer_id = ?), 0)
        - COALESCE((SELECT SUM(amount_paise) FROM payments WHERE customer_id = ?), 0)
       ) AS due
-  `).get(cid, cid);
+  `).get(cid, cid, cid);
 
   const previous_due_paise = due;
   const total_due_paise    = previous_due_paise + amount_paise;

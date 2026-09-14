@@ -18,7 +18,8 @@ router.get("/dashboard", (req, res) => {
 
   const total_outstanding_paise = db.prepare(`
     SELECT
-      (COALESCE((SELECT SUM(amount_paise) FROM bills), 0)
+            (COALESCE((SELECT SUM(amount_paise) FROM bills), 0)
+       + COALESCE((SELECT SUM(amount_paise) FROM notebook_dues), 0)
        - COALESCE((SELECT SUM(amount_paise) FROM payments), 0)) AS s
   `).get().s;
 
@@ -59,8 +60,10 @@ router.get("/dashboard", (req, res) => {
 
   const top_defaulters = db.prepare(`
     SELECT c.id, c.name, c.mobile,
-      (COALESCE((SELECT SUM(amount_paise) FROM bills    WHERE customer_id = c.id), 0)
-       - COALESCE((SELECT SUM(amount_paise) FROM payments WHERE customer_id = c.id), 0)
+          SELECT
+      (COALESCE((SELECT SUM(amount_paise) FROM bills    WHERE customer_id = ?), 0)
+       + COALESCE((SELECT SUM(amount_paise) FROM notebook_dues WHERE customer_id = ?), 0)
+       - COALESCE((SELECT SUM(amount_paise) FROM payments WHERE customer_id = ?), 0)
       ) AS due_paise
     FROM customers c
     WHERE c.is_active = 1

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Billing History · Tubewell Billing</title>
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=2" />
 </head>
 <body>
   <div class="container">
@@ -25,10 +25,11 @@
     </div>
   </div>
 
-  <script src="/js/api.js?v=11"></script>
-  <script src="/js/format.js?v=11"></script>
-  <script src="/js/whatsapp.js?v=11"></script>
-  <script src="/js/nav.js?v=11"></script>
+  <script src="/js/api.js?v=13"></script>
+  <script src="/js/format.js?v=13"></script>
+  <script src="/js/settings.js?v=13"></script>
+  <script src="/js/whatsapp.js?v=13"></script>
+  <script src="/js/nav.js?v=13"></script>
   <script>
     renderNav("billing-history");
     const rowsEl = document.getElementById("rows");
@@ -42,17 +43,27 @@
         }
         rowsEl.innerHTML = rows.map(r => {
           const isBill = r.type === "bill";
+          const isNotebook = r.type === "notebook";
+          const isCredit = isBill || isNotebook;
+          const label = isBill ? "Bill" : (isNotebook ? "Notebook" : "Payment");
+
           const details = isBill
             ? `${formatUsageShort(r.usage_minutes)} · ${formatTime12(r.start_time)}–${formatTime12(r.end_time)}`
-            : (r.mode === "cash" ? "Cash" : "Online") + (r.note ? " · " + escapeHtml(r.note) : "");
-          const amtClass = isBill ? "due positive" : "due zero";
+            : isNotebook
+              ? (r.note ? escapeHtml(r.note) : "Carried forward from notebook")
+              : (r.mode === "cash" ? "Cash" : "Online") + (r.note ? " · " + escapeHtml(r.note) : "");
+
+          const amtClass = isCredit ? "due positive" : "due zero";
+          const sign = isCredit ? "−" : "+";
+          const badgeCls = isCredit ? "unpaid" : "paid";
+
           return `
             <tr data-id="${r.customer_id}">
               <td>${formatDate(r.date)}</td>
-              <td>${isBill ? '<span class="badge unpaid">Bill</span>' : '<span class="badge paid">Payment</span>'}</td>
+              <td><span class="badge ${badgeCls}">${label}</span></td>
               <td>${escapeHtml(r.customer_name)}</td>
               <td class="muted">${details}</td>
-              <td class="text-right ${amtClass}">${isBill ? "−" : "+"} ${formatINR(r.amount_paise)}</td>
+              <td class="text-right ${amtClass}">${sign} ${formatINR(r.amount_paise)}</td>
             </tr>`;
         }).join("");
 
