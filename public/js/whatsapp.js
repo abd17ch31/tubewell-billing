@@ -13,22 +13,27 @@ function openWhatsApp(mobile, message) {
 
 function buildBillMessage(customer, bill) {
   const usageHours = formatUsageHours(bill.usage_minutes);
-  const date = formatDate(bill.bill_date);
-  const rate = formatINR(bill.rate_paise_per_hour);
+  const date = formatDateLong(bill.bill_date);
+
+  const s = (window.settingsCache && settingsCache.data) || {};
+  const footer = s.receipt_footer || "Thank you.";
+
+  const todayBill   = Number(bill.amount_paise) || 0;
+  const totalDue    = Number(customer.due_paise) || 0;   // live, includes all notebook dues
+  const previousDue = totalDue - todayBill;
 
   return `Hello ${customer.name} ji,
 Your tubewell bill details:
-
-Previous Due: ${formatINR(bill.previous_due_paise)}
-Current Bill: ${formatINR(bill.amount_paise)}
-Total Due: ${formatINR(bill.total_due_paise)}
-
-Tubewell Usage: ${usageHours}
+Previous Due: ${formatINR(previousDue)}
 Date: ${date}
-Rate: ${rate}/hour
+Tubewell Usage: ${usageHours}
+Today Bill: ${formatINR(todayBill)}
+Total Due: ${formatINR(totalDue)}
 
-Thank you.`;
+${footer}`;
 }
+
+window.buildBillMessage = buildBillMessage;
 
 function buildPaymentMessage(customer, payment, previousDuePaise, remainingDuePaise) {
   return `Hello ${customer.name} ji,

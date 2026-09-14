@@ -65,6 +65,20 @@ function formatTime12(hhmm) {
   return `${h}:${m} ${ampm}`;
 }
 
+
+function formatDateLong(input) {
+  if (!input) return "";
+  const d = typeof input === "string" && input.length === 10
+    ? new Date(input + "T00:00:00")
+    : new Date(input);
+  const day = String(d.getDate()).padStart(2, "0");
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sept","Oct","Nov","Dec"];
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
+window.formatDateLong = formatDateLong;
 window.splitHM = splitHM;
 window.formatUsageHours = formatUsageHours;
 window.formatUsageShort = formatUsageShort;
