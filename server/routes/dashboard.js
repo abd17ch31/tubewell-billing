@@ -9,31 +9,31 @@ function todayLocalISO() {
 }
 
 // GET /api/dashboard
-router.get("/dashboard", (req, res) => {
+router.get("/dashboard", async (req, res) => {
   const today = todayLocalISO();
 
-  const total_customers = db.prepare(
+  const [{ c: total_customers }] = await db.query(
     "SELECT COUNT(*) AS c FROM customers WHERE is_active = 1"
-  ).get().c;
+  );
 
-  const total_outstanding_paise = db.prepare(`
+  const [{ s: total_outstanding_paise }] = await db.query(`
     SELECT
       (COALESCE((SELECT SUM(amount_paise) FROM bills), 0)
        + COALESCE((SELECT SUM(amount_paise) FROM notebook_dues), 0)
        - COALESCE((SELECT SUM(amount_paise) FROM payments), 0)) AS s
-  `).get().s;
+  `);
 
-  const today_bills = db.prepare(`
+  const [today_bills] = await db.query(`
     SELECT COUNT(*) AS c, COALESCE(SUM(amount_paise), 0) AS s
     FROM bills WHERE bill_date = ?
-  `).get(today);
+  `, [today]);
 
-  const today_payments = db.prepare(`
+  const [today_payments] = await db.query(`
     SELECT COUNT(*) AS c, COALESCE(SUM(amount_paise), 0) AS s
     FROM payments WHERE payment_date = ?
-  `).get(today);
+  `, [today]);
 
-  const recent_bills = db.prepare(`
+  const recent_bills = await db.query(`
     SELECT 'bill' AS type, b.id, b.customer_id,
            c.name AS customer_name,
            b.bill_date AS date, b.amount_paise, b.created_at
@@ -41,9 +41,9 @@ router.get("/dashboard", (req, res) => {
     WHERE c.is_active = 1
     ORDER BY b.created_at DESC, b.id DESC
     LIMIT 15
-  `).all();
+  `);
 
-  const recent_payments = db.prepare(`
+  const recent_payments = await db.query(`
     SELECT 'payment' AS type, p.id, p.customer_id,
            c.name AS customer_name,
            p.payment_date AS date, p.amount_paise, p.mode, p.created_at
@@ -51,14 +51,14 @@ router.get("/dashboard", (req, res) => {
     WHERE c.is_active = 1
     ORDER BY p.created_at DESC, p.id DESC
     LIMIT 15
-  `).all();
+  `);
 
   const recent = recent_bills
     .concat(recent_payments)
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
     .slice(0, 10);
 
-  const top_defaulters = db.prepare(`
+  const top_defaulters = (await db.query(`
     SELECT c.id, c.name, c.mobile,
       (COALESCE((SELECT SUM(amount_paise) FROM bills         WHERE customer_id = c.id), 0)
        + COALESCE((SELECT SUM(amount_paise) FROM notebook_dues WHERE customer_id = c.id), 0)
@@ -68,7 +68,7 @@ router.get("/dashboard", (req, res) => {
     WHERE c.is_active = 1
     ORDER BY due_paise DESC
     LIMIT 8
-  `).all().filter(r => r.due_paise > 0).slice(0, 5);
+  `)).filter(r => r.due_paise > 0).slice(0, 5);
 
   res.json({
     today,
@@ -84,43 +84,43 @@ router.get("/dashboard", (req, res) => {
 });
 
 // GET /api/all-payments   → global payment feed
-router.get("/all-payments", (req, res) => {
-  const rows = db.prepare(`
+router.get("/all-payments", async (req, res) => {
+  const rows = await db.query(`
     SELECT p.id, p.customer_id, p.payment_date, p.amount_paise, p.mode, p.note,
            c.name AS customer_name, c.mobile AS customer_mobile
     FROM payments p JOIN customers c ON c.id = p.customer_id
     WHERE c.is_active = 1
     ORDER BY p.payment_date DESC, p.id DESC
-  `).all();
+  `);
   res.json(rows);
 });
 
 // GET /api/all-transactions   → global bill + notebook + payment feed
-router.get("/all-transactions", (req, res) => {
-  const bills = db.prepare(`
+router.get("/all-transactions", async (req, res) => {
+  const bills = await db.query(`
     SELECT 'bill' AS type, b.id, b.customer_id,
            c.name AS customer_name,
            b.bill_date AS date, b.start_time, b.end_time, b.usage_minutes,
            b.rate_paise_per_hour, b.amount_paise, b.created_at
     FROM bills b JOIN customers c ON c.id = b.customer_id
     WHERE c.is_active = 1
-  `).all();
+  `);
 
-  const payments = db.prepare(`
+  const payments = await db.query(`
     SELECT 'payment' AS type, p.id, p.customer_id,
            c.name AS customer_name,
            p.payment_date AS date, p.amount_paise, p.mode, p.note, p.created_at
     FROM payments p JOIN customers c ON c.id = p.customer_id
     WHERE c.is_active = 1
-  `).all();
+  `);
 
-  const notebook = db.prepare(`
+  const notebook = await db.query(`
     SELECT 'notebook' AS type, n.id, n.customer_id,
            c.name AS customer_name,
            n.due_date AS date, n.amount_paise, n.note, n.created_at
     FROM notebook_dues n JOIN customers c ON c.id = n.customer_id
     WHERE c.is_active = 1
-  `).all();
+  `);
 
   const all = bills.concat(payments, notebook).sort((a, b) => {
     const d = String(b.date).localeCompare(String(a.date));
@@ -132,8 +132,8 @@ router.get("/all-transactions", (req, res) => {
 });
 
 // GET /api/all-due   → per-customer due, sorted highest first
-router.get("/all-due", (req, res) => {
-  const rows = db.prepare(`
+router.get("/all-due", async (req, res) => {
+  const rows = await db.query(`
     SELECT c.id, c.name, c.mobile, c.address,
       (COALESCE((SELECT SUM(amount_paise) FROM bills         WHERE customer_id = c.id), 0)
        + COALESCE((SELECT SUM(amount_paise) FROM notebook_dues WHERE customer_id = c.id), 0)
@@ -141,8 +141,8 @@ router.get("/all-due", (req, res) => {
       ) AS due_paise
     FROM customers c
     WHERE c.is_active = 1
-    ORDER BY due_paise DESC, c.name COLLATE NOCASE ASC
-  `).all();
+    ORDER BY due_paise DESC, LOWER(c.name) ASC
+  `);
   res.json(rows);
 });
 

@@ -4,7 +4,7 @@ const express = require("express");
 const path = require("path");
 const cookieSession = require("cookie-session");
 
-require("./db");
+const db = require("./db");
 const authRoutes      = require("./auth");
 const customerRoutes  = require("./routes/customers");
 const billRoutes      = require("./routes/bills");
@@ -61,8 +61,23 @@ app.get(/^\/(?!api).*/, (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
 
-app.listen(PORT, () => {
-  console.log(`[server] Running on http://localhost:${PORT}`);
+async function start() {
+  await db.initializeDatabase();
+  const server = app.listen(PORT, () => {
+    console.log(`[server] Running on http://localhost:${PORT}`);
+  });
+  server.on("error", (error) => {
+    console.error("[server] Failed to listen:", error);
+    process.exitCode = 1;
+  });
+}
+
+start().catch(async (error) => {
+  console.error("[server] Startup failed; Supabase PostgreSQL must be available before the app can start:", error);
+  try {
+    await db.close();
+  } catch (closeError) {
+    console.error("[db] Failed to close PostgreSQL pool after startup failure:", closeError);
+  }
+  process.exitCode = 1;
 });
-
-

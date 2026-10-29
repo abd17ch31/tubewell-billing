@@ -4,11 +4,11 @@ const db = require("../db");
 const router = express.Router();
 
 // GET /api/customers/:customerId/bills
-router.get("/customers/:customerId/bills", (req, res) => {
+router.get("/customers/:customerId/bills", async (req, res) => {
   const cid = Number(req.params.customerId);
   if (!Number.isInteger(cid)) return res.status(400).json({ error: "Invalid customer id" });
 
-  const rows = db.prepare(`
+  const rows = await db.query(`
     SELECT b.*,
       COALESCE((
         SELECT SUM(amount_paise) FROM payment_allocations WHERE bill_id = b.id
@@ -16,19 +16,20 @@ router.get("/customers/:customerId/bills", (req, res) => {
     FROM bills b
     WHERE b.customer_id = ?
     ORDER BY b.bill_date DESC, b.id DESC
-  `).all(cid);
+  `, [cid]);
 
   res.json(rows);
 });
 
 // POST /api/customers/:customerId/bills
-router.post("/customers/:customerId/bills", (req, res) => {
+router.post("/customers/:customerId/bills", async (req, res) => {
   const cid = Number(req.params.customerId);
   if (!Number.isInteger(cid)) return res.status(400).json({ error: "Invalid customer id" });
 
-  const customer = db.prepare(
-    "SELECT id FROM customers WHERE id = ? AND is_active = 1"
-  ).get(cid);
+  const [customer] = await db.query(
+    "SELECT id FROM customers WHERE id = ? AND is_active = 1",
+    [cid],
+  );
   if (!customer) return res.status(404).json({ error: "Customer not found" });
 
   const { bill_date, start_time, end_time, usage_minutes, rate_paise_per_hour } = req.body || {};
@@ -61,41 +62,41 @@ router.post("/customers/:customerId/bills", (req, res) => {
   const amount_paise = Math.round((usageMin / 60) * rate);
 
   // snapshot previous due = current customer due before this bill
-    const { due } = db.prepare(`
+  const [{ due }] = await db.query(`
     SELECT
       (COALESCE((SELECT SUM(amount_paise) FROM bills    WHERE customer_id = ?), 0)
        + COALESCE((SELECT SUM(amount_paise) FROM notebook_dues WHERE customer_id = ?), 0)
        - COALESCE((SELECT SUM(amount_paise) FROM payments WHERE customer_id = ?), 0)
       ) AS due
-  `).get(cid, cid, cid);
+  `, [cid, cid, cid]);
 
   const previous_due_paise = due;
   const total_due_paise    = previous_due_paise + amount_paise;
 
-  const info = db.prepare(`
+  const info = await db.execute(`
     INSERT INTO bills
       (customer_id, bill_date, start_time, end_time, usage_minutes,
        rate_paise_per_hour, amount_paise, previous_due_paise, total_due_paise)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+  `, [
     cid, bill_date, start_time, end_time, usageMin,
-    rate, amount_paise, previous_due_paise, total_due_paise
-  );
+    rate, amount_paise, previous_due_paise, total_due_paise,
+  ]);
 
-  const bill = db.prepare("SELECT * FROM bills WHERE id = ?").get(info.lastInsertRowid);
+  const [bill] = await db.query("SELECT * FROM bills WHERE id = ?", [info.insertId]);
   res.status(201).json({ ...bill, allocated_paise: 0 });
 });
 
 // GET /api/bills/:id
-router.get("/bills/:id", (req, res) => {
+router.get("/bills/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid id" });
 
-  const bill = db.prepare(`
+  const [bill] = await db.query(`
     SELECT b.*,
       COALESCE((SELECT SUM(amount_paise) FROM payment_allocations WHERE bill_id = b.id), 0) AS allocated_paise
     FROM bills b WHERE b.id = ?
-  `).get(id);
+  `, [id]);
   if (!bill) return res.status(404).json({ error: "Bill not found" });
 
   res.json(bill);
@@ -118,16 +119,17 @@ function toMinutes(t) {
 
 // DELETE /api/bills/:id
 // Only allowed if no payments have been allocated to this bill.
-router.delete("/bills/:id", (req, res) => {
+router.delete("/bills/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid id" });
 
-  const bill = db.prepare("SELECT * FROM bills WHERE id = ?").get(id);
+  const [bill] = await db.query("SELECT * FROM bills WHERE id = ?", [id]);
   if (!bill) return res.status(404).json({ error: "Bill not found" });
 
-  const allocated = db.prepare(
-    "SELECT COALESCE(SUM(amount_paise),0) AS s FROM payment_allocations WHERE bill_id = ?"
-  ).get(id).s;
+  const [{ s: allocated }] = await db.query(
+    "SELECT COALESCE(SUM(amount_paise),0) AS s FROM payment_allocations WHERE bill_id = ?",
+    [id],
+  );
 
   if (allocated > 0) {
     return res.status(409).json({
@@ -136,7 +138,7 @@ router.delete("/bills/:id", (req, res) => {
     });
   }
 
-  db.prepare("DELETE FROM bills WHERE id = ?").run(id);
+  await db.execute("DELETE FROM bills WHERE id = ?", [id]);
   res.json({ ok: true });
 });
 

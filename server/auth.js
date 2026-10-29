@@ -27,25 +27,26 @@ function safeCompare(a, b) {
   return crypto.timingSafeEqual(ab, bb);
 }
 
-function getStoredHash() {
-  const row = db.prepare("SELECT value FROM settings WHERE key = 'admin_password_hash'").get();
+async function getStoredHash() {
+  const rows = await db.query('SELECT "value" FROM settings WHERE "key" = ?', ["admin_password_hash"]);
+  const row = rows[0];
   return row ? row.value : null;
 }
 
-function checkPassword(password) {
-  const storedHash = getStoredHash();
+async function checkPassword(password) {
+  const storedHash = await getStoredHash();
   if (storedHash) return verifyPassword(password, storedHash);
   // Fall back to env password until the user sets one in Settings
   const env = process.env.ADMIN_PASSWORD || "changeme123";
   return safeCompare(password, env);
 }
 
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
   const { password } = req.body || {};
   if (!password || typeof password !== "string") {
     return res.status(400).json({ error: "Password required" });
   }
-  if (!checkPassword(password)) {
+  if (!(await checkPassword(password))) {
     return res.status(401).json({ error: "Invalid password" });
   }
   req.session.authed = true;
@@ -63,7 +64,7 @@ router.get("/me", (req, res) => {
 });
 
 // Change password (requires being logged in + knowing current password)
-router.post("/change-password", (req, res) => {
+router.post("/change-password", async (req, res) => {
   if (!req.session || !req.session.authed) {
     return res.status(401).json({ error: "Not authenticated" });
   }
@@ -74,15 +75,15 @@ router.post("/change-password", (req, res) => {
   if (String(new_password).length < 6) {
     return res.status(400).json({ error: "New password must be at least 6 characters" });
   }
-  if (!checkPassword(current_password)) {
+  if (!(await checkPassword(current_password))) {
     return res.status(401).json({ error: "Current password is incorrect" });
   }
 
   const hash = hashPassword(new_password);
-  db.prepare(`
-    INSERT INTO settings (key, value, updated_at) VALUES ('admin_password_hash', ?, datetime('now'))
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
-  `).run(hash);
+  await db.execute(`
+    INSERT INTO settings ("key", "value", updated_at) VALUES ('admin_password_hash', ?, CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+    ON CONFLICT ("key") DO UPDATE SET "value" = EXCLUDED."value", updated_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
+  `, [hash]);
 
   res.json({ ok: true });
 });

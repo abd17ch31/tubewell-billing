@@ -11,8 +11,8 @@ const PUBLIC_KEYS = [
 ];
 
 // GET /api/settings  → returns public settings as an object
-router.get("/settings", (req, res) => {
-  const rows = db.prepare("SELECT key, value FROM settings").all();
+router.get("/settings", async (req, res) => {
+  const rows = await db.query('SELECT "key", "value" FROM settings');
   const out = {};
   for (const r of rows) {
     if (PUBLIC_KEYS.includes(r.key)) out[r.key] = r.value;
@@ -21,7 +21,7 @@ router.get("/settings", (req, res) => {
 });
 
 // PUT /api/settings  → updates one or more keys
-router.put("/settings", (req, res) => {
+router.put("/settings", async (req, res) => {
   const body = req.body || {};
   const allowed = PUBLIC_KEYS;
   const updates = [];
@@ -49,15 +49,14 @@ router.put("/settings", (req, res) => {
     }
   }
 
-  const stmt = db.prepare(`
-    INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
-  `);
-
-  const tx = db.transaction(() => {
-    for (const u of updates) stmt.run(u.key, u.value);
+  await db.transaction(async (tx) => {
+    for (const u of updates) {
+      await tx.execute(`
+        INSERT INTO settings ("key", "value", updated_at) VALUES (?, ?, CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+        ON CONFLICT ("key") DO UPDATE SET "value" = EXCLUDED."value", updated_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
+      `, [u.key, u.value]);
+    }
   });
-  tx();
 
   res.json({ ok: true });
 });
