@@ -11,6 +11,13 @@ function openWhatsApp(mobile, message) {
   window.open(url, "_blank");
 }
 
+function openSMS(mobile, message) {
+  const phone = normalizeMobileForWA(mobile);
+  if (!phone) { alert("Customer has no valid mobile number."); return; }
+  const separator = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "&" : "?";
+  window.location.href = `sms:${phone}${separator}body=${encodeURIComponent(message)}`;
+}
+
 function buildBillMessage(customer, bill) {
   const usageHours = formatUsageHours(bill.usage_minutes);
   const date = formatDateLong(bill.bill_date);
@@ -50,5 +57,6 @@ Thank you.`;
 
 window.normalizeMobileForWA = normalizeMobileForWA;
 window.openWhatsApp = openWhatsApp;
+window.openSMS = openSMS;
 window.buildBillMessage = buildBillMessage;
 window.buildPaymentMessage = buildPaymentMessage;

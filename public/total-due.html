@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Total Due · Tubewell Billing</title>
   <link rel="stylesheet" href="/css/style.css" />
 </head>
@@ -47,7 +47,7 @@
       try {
         const rows = await api.get("/api/all-due");
         const positive = rows.filter(r => r.due_paise > 0);
-        const total = positive.reduce((s, r) => s + r.due_paise, 0);
+        const total = positive.reduce((s, r) => s + Number(r.due_paise), 0);
 
         document.getElementById("sOwing").textContent = positive.length;
         document.getElementById("sTotal").textContent = formatINR(total);

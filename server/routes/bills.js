@@ -10,6 +10,7 @@ router.get("/customers/:customerId/bills", async (req, res) => {
 
   const rows = await db.query(`
     SELECT b.*,
+      (b.previous_due_paise + b.amount_paise) AS calculated_total_due_paise,
       COALESCE((
         SELECT SUM(amount_paise) FROM payment_allocations WHERE bill_id = b.id
       ), 0) AS allocated_paise
@@ -18,7 +19,7 @@ router.get("/customers/:customerId/bills", async (req, res) => {
     ORDER BY b.bill_date DESC, b.id DESC
   `, [cid]);
 
-  res.json(rows);
+  res.json(rows.map(withCalculatedTotalDue));
 });
 
 // POST /api/customers/:customerId/bills
@@ -70,7 +71,7 @@ router.post("/customers/:customerId/bills", async (req, res) => {
       ) AS due
   `, [cid, cid, cid]);
 
-  const previous_due_paise = due;
+  const previous_due_paise = Number(due);
   const total_due_paise    = previous_due_paise + amount_paise;
 
   const info = await db.execute(`
@@ -94,15 +95,20 @@ router.get("/bills/:id", async (req, res) => {
 
   const [bill] = await db.query(`
     SELECT b.*,
+      (b.previous_due_paise + b.amount_paise) AS calculated_total_due_paise,
       COALESCE((SELECT SUM(amount_paise) FROM payment_allocations WHERE bill_id = b.id), 0) AS allocated_paise
     FROM bills b WHERE b.id = ?
   `, [id]);
   if (!bill) return res.status(404).json({ error: "Bill not found" });
 
-  res.json(bill);
+  res.json(withCalculatedTotalDue(bill));
 });
 
 // ---------- helpers ----------
+function withCalculatedTotalDue({ calculated_total_due_paise, ...bill }) {
+  return { ...bill, total_due_paise: calculated_total_due_paise };
+}
+
 function isValidDate(s) {
   return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 }

@@ -13,6 +13,7 @@ const REQUIRED_TABLES = [
 ];
 
 types.setTypeParser(20, Number);
+types.setTypeParser(1700, Number);
 types.setTypeParser(1114, (value) => value);
 
 function getConnectionOptions(env = process.env) {

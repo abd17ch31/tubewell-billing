@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Customer · Tubewell Billing</title>
-  <link rel="stylesheet" href="/css/style.css?v=2" />
+  <link rel="stylesheet" href="/css/style.css?v=3" />
 </head>
-<body>
+<body class="customer-page">
   <div class="container">
-    <p><a href="/customers.html">← Back to Customers</a></p>
+    <p class="back-link"><a href="/customers.html">← Back to Customers</a></p>
 
     <div id="main" class="stack">
       <p class="muted">Loading…</p>
@@ -124,10 +124,22 @@
     </form>
   </dialog>
 
+  <dialog id="sendDialog">
+    <div class="dialog-body">
+      <h2>Send message</h2>
+      <p class="muted">Choose how to send this message to <span id="sendTarget"></span>.</p>
+      <div class="dialog-actions">
+        <button type="button" id="sendWhatsAppBtn">WhatsApp</button>
+        <button type="button" class="secondary" id="sendSMSBtn">SMS</button>
+        <button type="button" class="secondary" id="cancelSendBtn">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
   <script src="/js/api.js?v=13"></script>
   <script src="/js/format.js?v=13"></script>
   <script src="/js/settings.js?v=13"></script>
-  <script src="/js/whatsapp.js?v=13"></script>
+  <script src="/js/whatsapp.js?v=14"></script>
   <script src="/js/nav.js?v=13"></script>
   <script>
     renderNav("customers");
@@ -167,6 +179,10 @@
     const nAmount  = document.getElementById("nAmount");
     const nNote    = document.getElementById("nNote");
 
+    const sendDialog = document.getElementById("sendDialog");
+    const sendTarget = document.getElementById("sendTarget");
+    let pendingMessage = null;
+
     let currentCustomer = null;
     let currentBills = [];
     let currentPayments = [];
@@ -196,6 +212,34 @@
       }
     }
 
+    function showSendOptions(mobile, message) {
+      pendingMessage = { mobile, message };
+      sendTarget.textContent = mobile;
+      sendDialog.showModal();
+    }
+
+    function sendPendingMessage(channel) {
+      if (!pendingMessage) return;
+      const { mobile, message } = pendingMessage;
+      pendingMessage = null;
+      sendDialog.close();
+      if (channel === "sms") openSMS(mobile, message);
+      else openWhatsApp(mobile, message);
+    }
+
+    document.getElementById("sendWhatsAppBtn").addEventListener("click", function () {
+      sendPendingMessage("whatsapp");
+    });
+    document.getElementById("sendSMSBtn").addEventListener("click", function () {
+      sendPendingMessage("sms");
+    });
+    document.getElementById("cancelSendBtn").addEventListener("click", function () {
+      sendDialog.close();
+    });
+    sendDialog.addEventListener("close", function () {
+      pendingMessage = null;
+    });
+
     function render() {
       const c = currentCustomer;
       const dueClass = c.due_paise > 0 ? "positive" : "zero";
@@ -217,6 +261,7 @@
             <button id="addBillBtn">Add Bill</button>
             <button id="addNbBtn" class="secondary">Add Notebook Due</button>
             <button id="payBillBtn" class="secondary">Pay Bill</button>
+            <button id="downloadPdfBtn" class="secondary">Download PDF</button>
             <button id="editBtn" class="secondary">Edit</button>
             <button id="deleteBtn" class="danger">Delete</button>
           </div>
@@ -252,7 +297,6 @@
                   <th class="text-right">Rate</th>
                   <th class="text-right">Bill</th>
                   <th class="text-right">Prev Due</th>
-                  <th class="text-right">Total Due</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
@@ -300,13 +344,16 @@
       document.getElementById("addBillBtn").addEventListener("click", openBillDialog);
       document.getElementById("addNbBtn").addEventListener("click", openNbDialog);
       document.getElementById("payBillBtn").addEventListener("click", openPayDialog);
+      document.getElementById("downloadPdfBtn").addEventListener("click", function () {
+        window.print();
+      });
 
       // ---- Bill Send ----
       mainEl.querySelectorAll("[data-send-bill]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           const bill = currentBills.find(function (x) { return String(x.id) === btn.dataset.sendBill; });
           if (!bill) return;
-          openWhatsApp(currentCustomer.mobile, buildBillMessage(currentCustomer, bill));
+          showSendOptions(currentCustomer.mobile, buildBillMessage(currentCustomer, bill));
         });
       });
 
@@ -349,7 +396,7 @@
               detail.due_before_paise,
               detail.due_after_paise
             );
-            openWhatsApp(currentCustomer.mobile, msg);
+            showSendOptions(currentCustomer.mobile, msg);
           } catch (e) { alert(e.message); }
         });
       });
@@ -371,7 +418,7 @@
 
     function renderBillRows() {
       if (!currentBills.length) {
-        return `<tr><td colspan="8" class="muted">No bills yet.</td></tr>`;
+        return `<tr><td colspan="7" class="muted">No bills yet.</td></tr>`;
       }
       let html = "";
       for (let i = 0; i < currentBills.length; i++) {
@@ -384,7 +431,6 @@
             <td class="text-right">${formatINR(b.rate_paise_per_hour)}/hr</td>
             <td class="text-right">${formatINR(b.amount_paise)}</td>
             <td class="text-right">${formatINR(b.previous_due_paise)}</td>
-            <td class="text-right">${formatINR(b.total_due_paise)}</td>
             <td><span class="badge ${status.cls}">${status.label}</span></td>
             <td>
               <button class="secondary" data-send-bill="${b.id}" style="padding:6px 10px;font-size:.85rem">Send</button>

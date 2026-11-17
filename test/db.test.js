@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const test = require("node:test");
+const { types } = require("pg");
 const {
   createDatabase,
   getConnectionOptions,
@@ -55,6 +56,10 @@ test("Supabase database URL validates connection URL and scheme", () => {
     SUPABASE_DB_URL: "postgresql://postgres:secret@db.example.supabase.co:5432/postgres",
     SUPABASE_DB_SSL_CA: "./missing-supabase-root.crt",
   }), /Could not read Supabase root certificate/);
+});
+
+test("PostgreSQL numeric aggregate values are parsed as numbers", () => {
+  assert.equal(types.getTypeParser(1700)("123456"), 123456);
 });
 
 test("query adapter converts placeholders and quoted identifiers for PostgreSQL", () => {
